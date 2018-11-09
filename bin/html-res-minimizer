@@ -1,0 +1,37 @@
+#! /usr/bin/python3
+# html-res-minimizer
+
+import os
+import sys
+import re
+from rjsmin import jsmin
+from rcssmin import cssmin
+
+# Build a list of the conversions to be done
+filenames = []
+for arg in sys.argv[1:]:
+	if os.path.isdir(arg):
+		for filename in os.listdir(arg):
+			m = re.search(r"^(.+?)(\.min)?\.((js)|(css))$", filename)
+			if m and m.group(2) is None:		# if no ".min.",
+				filenames.append(("%s/%s" % (arg, filename), "%s/%s.min.%s" % (arg, m.group(1), m.group(3))))
+	else:
+		m = re.search(r"^(.+?)(\.min)?\.((js)|(css))$", arg)
+		if m and m.group(2) is None:		# if no ".min.",
+			filenames.append((arg, "%s.min.%s" % (m.group(1), m.group(3))))
+
+# Perform the conversions
+for inname, outname in filenames:
+	print("  %s" % inname)
+	if inname.endswith(".js"):
+		with open(inname, mode="r", encoding="utf-8") as infile:
+			outtext = jsmin(infile.read())
+	elif inname.endswith(".css"):
+		with open(inname, mode="r", encoding="utf-8") as infile:
+			outtext = cssmin(infile.read())
+	else:
+		raise AssertionError
+	existing_outtext = open(outname,"r",encoding="utf-8").read() if os.path.exists(outname) else None
+	if existing_outtext != outtext:
+		open(outname, mode="w", encoding="utf-8").write(outtext)
+

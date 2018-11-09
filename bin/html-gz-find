@@ -1,0 +1,2 @@
+#! /bin/sh
+find "$@" -name source -prune -o -regextype posix-egrep -regex '.*\.(html|js|css|svg|pdf|ico)$' -print0
