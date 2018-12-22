@@ -1,7 +1,7 @@
 #! /usr/bin/python3
 # html-style-checker
 # Copyright 2016--2018, Trinity College Computing Center
-# Last modified: 27 September 2018
+# Last modified: 21 December 2018
 #
 # This script checks HTML files for conformance to style. In particular:
 # * That the charset is defined as utf-8 at the top of the <head>
@@ -94,8 +94,8 @@ def check_html(filename, options):
 
 	# Check other tags in <head>
 	script_counter = Counter()
-	meta_name_items = {}
-	meta_opengraph_items = {}
+	meta_name_items = {}				# <meta name="description" content="A cool webpage">
+	meta_opengraph_items = {}			# <meta property="og:site_name" content="example.com">
 	for el in head.findall("./*"):
 		if options.debug:
 			print("  %s: %s" % (el.tag, str(el.attrib)))
@@ -127,8 +127,9 @@ def check_html(filename, options):
 					warning("link: stylesheet type is not text/css: %s" % el.attrib.get("type"))
 		
 		elif el.tag == "script":
-			if el.text is not None and el.text.startswith("window===parent"):
-				warning("script: hide_nav code should be in <body>, not <head>")
+			if el.text is not None and len(el.text) < 100 and "hide_nav" in el.text:
+				if el.text != 'parent===window||(document.documentElement.className="hide_nav")':
+					warning("non-standard hide_nav text")
 			else:
 				check_script(el, base, script_counter)
 
@@ -153,7 +154,10 @@ def check_html(filename, options):
 
 	# Check scripts in <body>
 	for el in body.findall(".//script"):
-		check_script(el, base, script_counter)
+		if el.text is not None and "hide_nav" in el.text:
+			warning("script: hide_nav code should be in <head>, not <body>")
+		else:
+			check_script(el, base, script_counter)
 
 	# Check <img> tags in <body>
 	for el in body.findall(".//img"):
@@ -237,8 +241,8 @@ def check_html(filename, options):
 			warning("no meta description")
 		if not 'keywords' in meta_name_items:
 			warning("no meta keywords")
-		if not 'BreadcrumbList' in script_counter:
-			warning("no BreadcrumbList")
+		if not 'BreadcrumbList' in script_counter and not 'WebSite' in script_counter:
+			warning("no Schema.org BreadcrumbList")
 
 	if not 'analytics' in script_counter:
 		warning("no analytics")
@@ -252,7 +256,6 @@ def open_doc(filename, query=""):
 			}
 		cgi = subprocess.run(os.path.abspath(filename), env=env, cwd=os.path.dirname(filename), stdout=subprocess.PIPE)
 		output = cgi.stdout.decode("utf-8").replace("\r","")
-		#print(output)
 		output = output.split("\n\n",1)[1]
 		doc = lxml.html.parse(io.StringIO(output))
 	else:
@@ -277,6 +280,7 @@ def open_doc(filename, query=""):
 
 	return root, head, body
 
+# Make sure an <a> element conforms to our standards.
 def check_hyperlink(base, el):
 	href =  el.attrib.get('href')
 	if href is None:
@@ -284,13 +288,15 @@ def check_hyperlink(base, el):
 		return
 	if options.debug:
 		print("  %s: %s" % (el.tag, href))
+
 	if href.startswith("#"):					# FIXME: why not test?
 		return
+
 	parsed_url = urlparse(href)	
 	if parsed_url.scheme == "mailto":
 		return
 
-	# Make sure type is declared for non-HTML files
+	# Make sure type is declared for non-HTML files (identified by extension).
 	m = re.search(r"\.([^/\.]+)$", parsed_url.path)
 	if m:
 		filename_ext = m.group(1)
@@ -308,19 +314,29 @@ def check_hyperlink(base, el):
 	if url_is_remote(href):
 		return
 
-	if not local_url_is_good(base, href):
+	if not local_url_is_good(base, href):		# not broken link
 		warning("a: broken link: %s" % str(el.attrib))
-	if not url_quoting_is_good(href):
+
+	if not url_quoting_is_good(href):			# correct use of percent quoting
 		warning("a: href: odd quoting: %s" % href)
 
-	if re.search(r"\.$", href):		# FIXME: detect ".", "..", "/..", etc.
+	if re.search(r"\.$", href):					# FIXME: detect ".", "..", "/..", etc.
 		warning("a: href to directory does not end with slash: %s" % href)
 		return
 
-	# Check links to other HTML documents.
+	# If link is to an HTML document, make sure the hyperlinked text is reasonable.
 	if el.attrib.get("type","text/html") == "text/html":
+
+		# The hyperlinked text
 		link_text = el.text_content().strip()
+
+		# We will forgive an original hyperlinked text as long as the title attribute
+		# (which is generally displayed on hover) matches the title of the document.
 		link_title = el.attrib.get("title")
+
+		# Open the document and extract what we consider reasonable 'names' for it.
+		# Also get a list of its fragments in case this turns out to be a 'back'
+		# navigation link.
 		acceptable_titles, probable_fragments = scan_document(base, parsed_url)
 
 		# If this is a 'back' navigation link and the target document has
@@ -336,7 +352,8 @@ def check_hyperlink(base, el):
 					warning("a: fragment not found: %s" % href)
 
 		# Otherwise compare linked text to title of document to which it is linked.
-		elif link_text != "" or (link_title != "" and len(el.xpath(".//img")) > 0):
+		#elif link_text != "" or (link_title != "" and len(el.xpath(".//img")) > 0):
+		elif link_text != "" or link_title is not None:
 			link_texts = set()
 			if link_text != "":
 				link_texts.add(link_text)
@@ -450,6 +467,8 @@ def url_quoting_is_good(url):
 # Parse an HTML file and extract a list of what we consider to be
 # reasonable possible link texts and fragment identifiers.
 def scan_document(base, parsed_url):
+
+	# Find the file cooresponding to this URL
 	filename = os.path.join(base, unquote(parsed_url.path))
 	if filename.endswith("/"):
 		for index in ("index.html", "index.cgi"):
@@ -458,33 +477,41 @@ def scan_document(base, parsed_url):
 				filename = candidate
 				break
 
+	# Open and parse it.
 	root, head, body = open_doc(filename, parsed_url.query)
 
+	# Set of acceptable titles goes here.
 	possible_titles = set()
+
+	# List of plausible fragment identifiers for this document goes here.
+	fragments = set()
+
+	# Start with <title> tag contents
 	title_text = find_one(head, "title").text.strip()
 
-	m = re.match(r"^[^:]+:\s*(.+)$", title_text)		# Remove site name
+	m = re.search(r"^[^:]+:\s*(.+)$", title_text)		# Remove site name
 	if m:
 		title_text = m.group(1)
 	possible_titles.add(title_text)
 
-	m = re.match(r"^(.+) \([^\(\)]+\)$", title_text)	# With subtitle in parenthes is removed
+	m = re.search(r"^(.+)\s+\([^\(\)]+\)$", title_text)	# With optional subtitle in parenthesis removed
 	if m:
 		possible_titles.add(m.group(1))
 
-	m = re.search(r"—(.+)$", title_text)				# without category name (which comes before em dash)
+	m = re.search(r"—(.+)$", title_text)				# Without category name (which comes before em dash)
 	if m:
 		title_text = m.group(1)
 		possible_titles.add(title_text)
 
-	m = re.match(r"Download (.+)$", title_text)
+	m = re.search(r"^Download (.+)$", title_text)
 	if m:
 		possible_titles.add(m.group(1))
 
-	m = re.match(r"(.+) on Youtube$", title_text)
+	m = re.search(r"^(.+) on Youtube$", title_text)
 	if m:
 		possible_titles.add(m.group(1))
 
+	# Take <h1> tag contents too
 	h1 = body.find(".//h1")
 	if h1 is not None:
 		h1_text = h1.text_content().strip()
@@ -492,14 +519,33 @@ def scan_document(base, parsed_url):
 			h1_text = h1_text[2:]
 		possible_titles.add(h1_text)
 
-	fragments = set()
-	for el in body.xpath(".//*"):
+	# If the URL given for this document includes a fragment identifier,
+	# we will consider an <h2> inside the element with that ID to be
+	# a valid title.
+	if parsed_url.fragment != "":
+		section = body.xpath(".//*[@id='%s']" % parsed_url.fragment)
+		if section:
+			h2 = section[0].xpath(".//h2")
+			if h2:
+				h2_text = h2[0].text_content().strip()
+				possible_titles.add(h2_text)
+				m = re.search(r"^(.+)\s+\([^\(\)]+\)$", h2_text)	# With optional subtitle in parenthesis removed
+				if m:
+					possible_titles.add(m.group(1))
+
+	# Find any sections in the document and save their ID attributes
+	# as possible fragment identifiers.
+	for el in body.xpath(".//section") + body.xpath(".//footer"):
 		id = el.attrib.get('id')
 		if id is not None:
-			for prefix in ("sec_", "idx"):
-				if id.startswith(prefix):
-					fragments.add(id)
-					break
+			fragments.add(id)
+
+	# Find spans which indicate subject index entries and add them
+	# as possible fragment identifiers too.
+	for el in body.xpath(".//span"):
+		id = el.attrib.get('id')
+		if id is not None and id.startswith("idx"):
+			fragments.add(id)
 
 	return possible_titles, fragments
 
