@@ -1,0 +1,69 @@
+#! /usr/bin/python3
+# audacity2webvtt
+# Last modified: 18 August 2020
+#
+# Copyright 2017--2020, Trinity College Computing Center
+# This file is part of the Hypertext Toolbox.
+#
+# Hypertext Toolbox is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Hypertext Toolbox is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Hypertext Toolbox. If not, see <http://www.gnu.org/licenses/>.
+#
+
+import re
+import lxml.etree as ET
+
+# Read a label track exported from Audacity as a text file.
+# Write a WebVTT file.
+def labels2webvtt(infd, outfd):
+	outfd.write("WEBVTT\r\n\r\n")
+	id = 0
+	for line in infd:
+		start, end, text = line.rstrip().split("\t")
+		start = float(start.replace(",","."))
+		end = float(end.replace(",","."))
+		outfd.write("%d\r\n" % id)
+		outfd.write("%02d:%06.3f --> %02d:%06.3f\r\n" % (int(start / 60), start % 60.0, int(end / 60), end % 60.0))
+		outfd.write("%s\r\n" % text.replace("|","\r\n"))
+		outfd.write("\r\n")
+		id += 1
+
+# Read in indicated label track from an AUP file (which is in XML format).
+# Write a WebVTT file.
+def aup2webvtt(infd, outfd, index=0):
+	tree = ET.parse(infd)
+	outfd.write("WEBVTT\r\n\r\n")
+	id = 0
+	labeltracks = tree.findall("//{http://audacity.sourceforge.net/xml/}labeltrack")
+	labeltrack = labeltracks[index]
+	for label in labeltrack:
+		assert label.tag.endswith("}label")
+		start = float(label.attrib['t'])
+		end = float(label.attrib['t1'])
+		text = label.attrib['title']
+		outfd.write("%d\r\n" % id)
+		outfd.write("%02d:%06.3f --> %02d:%06.3f\r\n" % (int(start / 60), start % 60.0, int(end / 60), end % 60.0))
+		outfd.write("%s\r\n" % text.replace("|","\r\n"))
+		outfd.write("\r\n")
+		id += 1
+
+if __name__ == "__main__":
+	import sys
+	assert len(sys.argv) in (3, 4)
+	infd = open(sys.argv[1], "r")
+	outfd = open(sys.argv[2], "w")
+	label_track_index = int(sys.argv[3]) if len(sys.argv) >= 4 else 0
+	if sys.argv[1].endswith(".aup"):
+		aup2webvtt(infd, outfd, label_track_index)
+	else:
+		labels2webvtt(infd, outfd)
+
