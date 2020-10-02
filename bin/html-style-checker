@@ -1,7 +1,7 @@
 #! /usr/bin/python3
 # html-style-checker
-# Copyright 2016--2018, Trinity College Computing Center
-# Last modified: 21 December 2018
+# Copyright 2016--2019, Trinity College Computing Center
+# Last modified: 11 October 2019
 #
 # This script checks HTML files for conformance to style. In particular:
 # * That the charset is defined as utf-8 at the top of the <head>
@@ -55,11 +55,11 @@ def check_html(filename, options):
 	base = os.path.dirname(filename)
 	root, head, body = open_doc(filename)
 
-	# Check <html>
+	# Check <html> tag
 	if not 'lang' in root.attrib:
 		warning("html: no lang attribute")
 
-	# Check <head>
+	# Check <head> tag and its <meta> children
 	if len(head) == 0:
 		raise HtmlError("Empty <head>")
 	head1 = head[0]
@@ -73,7 +73,7 @@ def check_html(filename, options):
 		elif head1.attrib["charset"] != "utf-8":
 			warning("First <meta> specifies charset %s instead of UTF-8" % head1.attrib["charset"])
 
-	# Check <title> (in <head>)
+	# Check <head> -> <title>
 	title_text_variants = set()
 	title_text = find_one(head, "title").text
 	if title_text is not None:
@@ -84,11 +84,16 @@ def check_html(filename, options):
 			m = re.search(r"—(.+)$", m.group(1))	# without category name (which comes before em dash)
 			if m:
 				title_text_variants.add(m.group(1))
+
+	# Check <body> ... <h1>
 	h1 = body.find(".//h1")
 	if h1 is not None:
 		h1_text = h1.text_content().strip()
 		if h1_text.startswith("<\xa0"):
 			h1_text = h1_text[2:]
+		elif h1_text.startswith("< "):
+			warning("Character after arrow in <h1> back link is not &nbsp;")
+			h1_text = h1_text[2:]		# so as not to trigger more confusing warnings
 		if not h1_text in title_text_variants:
 			warning("<h1> text does not match <title>: \"%s\" vs \"%s\"" % (h1_text, str(title_text_variants)))
 
@@ -343,7 +348,9 @@ def check_hyperlink(base, el):
 		# sections with fragment identifiers, make sure the 'back' link
 		# points to one of them. That way 'back' takes us to the part of
 		# the index which lists this document.
-		if link_text.startswith("<\xa0"):
+		# Note that here we accept both "<&nbsp;" and "< " as backlinks
+		# because we print a warning about "< " elsewhere.
+		if link_text.startswith("<\xa0") or link_text.startswith("< "):
 			if parsed_url.fragment == "":
 				if len(probable_fragments) > 0:
 					warning("a: no fragment in back href: %s" % href)

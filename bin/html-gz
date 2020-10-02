@@ -1,5 +1,5 @@
-#! /usr/bin/python
-#
+#! /usr/bin/python3
+# html-gz
 # Uses Zopfli:
 # https://github.com/google/zopfli
 
@@ -11,7 +11,7 @@ verbose_on = False
 
 def verbose(message):
 	if verbose_on:
-		print message
+		print(message)
 	pass
 
 files_compressed = 0
@@ -51,8 +51,8 @@ for filename in sys.argv[1:]:
 				stderr=subprocess.STDOUT
 				)
 		except subprocess.CalledProcessError:
-			print "    failed: non-zero exit code"
-			print output
+			print("    failed: non-zero exit code")
+			print(output)
 			sys.exit(1)
 
 		# Set the modification time of the output file to 10ms after the
@@ -61,5 +61,5 @@ for filename in sys.argv[1:]:
 		# were causing unnecessary rebuilding.
 		os.utime(filename_output, (filename_mtime + 0.01, filename_mtime + 0.01))
 
-print "Compressed %d and recompressed %d of %d files" % (files_compressed, files_recompressed, files_total)
+print("Compressed %d and recompressed %d of %d files" % (files_compressed, files_recompressed, files_total))
 
