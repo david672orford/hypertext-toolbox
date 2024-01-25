@@ -1,5 +1,9 @@
 #! /usr/bin/python3
 # html-gz
+# Gzip compress the files name don the command line putting the compressed
+# versions alongside the originals. Comparse dates to figure out which
+# compressed copies are out-of-date.
+#
 # Uses Zopfli:
 # https://github.com/google/zopfli
 

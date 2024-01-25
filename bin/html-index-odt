@@ -1,7 +1,7 @@
 #! /usr/bin/python3
 # encoding=utf-8
 # html-index-odt
-# Last modified: 3 March 2017
+# Last modified: 4 August 2021
 #
 # For each directory listed on the command line build an index.html from the
 # template index.html.tmpl. Insert into the <tbody> of the first <table> a
@@ -38,11 +38,11 @@ for folder in sys.argv[1:]:
 	# Skip index.html
 	# Sort them by handout number
 	filenames = [filename for filename in glob.glob("*.html") if filename != "index.html"]
-	filenames = sorted(filenames, key=lambda key: re.sub(r"(\d+)([A-Z]?)$", lambda m: "%02d%s" % (int(m.group(1)), m.group(2)), key.split("--")[0].split(".")[0]))
+	filenames = sorted(filenames, key=lambda key: re.sub(r"(\d+)", lambda m: "%02d" % int(m.group(1)), os.path.splitext(os.path.basename(key))[0], count=1))
 
 	for filename in filenames:
 		if verbose:
-			print("  %s" % filename)
+			print(" • %s" % filename)
 
 		doc = lxml.html.parse(open(filename))
 		title = doc.xpath("//title")[0].text

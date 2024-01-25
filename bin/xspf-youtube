@@ -90,6 +90,10 @@ def main(argv):
 		verify = True
 		argv.pop(0)
 
+	if len(argv) < 1:
+		print("Usage: xspf-youtube <playlist> [youtube URL] ...\n")
+		return False
+
 	filename = argv.pop(0)
 	filename_exists = os.path.exists(filename)
 	if filename_exists:
@@ -140,5 +144,7 @@ def main(argv):
 	if changes > 0:
 		playlist.save(filename)
 
-main(sys.argv[1:])
+	return True
+
+sys.exit(0 if main(sys.argv[1:]) else 1)
 

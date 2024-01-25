@@ -1,8 +1,8 @@
 #! /usr/bin/python3
 # html-video-encoder
-# Last modified: 13 January 2020
+# Last modified: 23 February 2021
 #
-# Copyright 2017--2020, Trinity College Computing Center
+# Copyright 2017--2021, Trinity College Computing Center
 # This file is part of the Hypertext Toolbox.
 #
 # Hypertext Toolbox is free software: you can redistribute it and/or modify
@@ -20,6 +20,21 @@
 #
 
 #
+# Required software:
+# * FFmpeg (apt install ffmpeg)
+# * MP4Box (apt install gpac)
+#
+# Compiling FFmpeg:
+# $ sudo apt-get install nasm libx264-dev libfdk-aac-dev libmp3lame-dev libopus-dev libvpx-dev
+# $ ./configure --enable-gpl --enable-libx264 --enable-libmp3lame --enable-nonfree --enable-libfdk-aac --enable-libopus --enable-libvpx
+# $ make
+# $ sudo make install
+#
+# Lossless format for exporting from Openshot:
+#  huffyuv for video
+#  pcm_s16le for audio
+#  avi container
+#
 # References:
 # * General
 #   * https://www.brightcove.com/en/blog/2013/09/what-formats-do-i-need-for-html5-video
@@ -28,7 +43,6 @@
 #   * http://stackoverflow.com/questions/7451635/how-to-detect-supported-video-formats-for-the-html5-video-tag
 #   * https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Video_codecs
 #   * https://videoblerg.wordpress.com/2017/11/10/ffmpeg-and-how-to-use-it-wrong/ (TODO: review this)
-#
 # * H.264 and HLS
 #   * https://github.com/dailymotion/hls.js/
 #   * https://trac.ffmpeg.org/wiki/Encode/H.264
@@ -44,16 +58,10 @@
 #   * https://github.com/google/shaka-player
 #   * https://trac.ffmpeg.org/wiki/Encode/VP9
 #   * http://wiki.webmproject.org/ffmpeg/vp9-encoding-guide
-#   * https://sites.google.com/a/webmproject.org/wiki/ffmpeg/vp9-encoding-guide
+#   * https://sites.google.com/a/webmproject.org/wiki/ffmpeg/vp9-encoding-guide (mirror of above?)
 #   * http://wiki.webmproject.org/adaptive-streaming/instructions-to-playback-adaptive-webm-using-dash
 #   * http://rigor.com/blog/2016/02/optimizing-webm-video-for-faster-streaming-and-seeking
 #   * https://developer.mozilla.org/ru/docs/Web/HTML/DASH_Adaptive_Streaming_for_HTML_5_Video
-#
-# Compiling FFmpeg:
-# $ sudo apt-get install nasm libx264-dev libfdk-aac-dev libmp3lame-dev libopus-dev libvpx-dev
-# $ ./configure --enable-gpl --enable-libx264 --enable-libmp3lame --enable-nonfree --enable-libfdk-aac --enable-libopus --enable-libvpx
-# $ make
-# $ sudo make install
 #
 # HTML <video> codecs attributes values for video/mp4:
 #  avc1.42E0xx: H.264 baseline where xx is the AVC level multiplied by 10
@@ -67,11 +75,6 @@
 # HTML <video> codecs attribute values for audio/mp4:
 #  mp4a.40.2: AAC-LC
 #  mp4a.40.5: HE-AAC
-#
-# Lossless format for exporting from Openshot:
-#  huffyuv for video
-#  pcm_s16le for audio
-#  avi container
 #
 
 import sys
@@ -178,12 +181,13 @@ def render_h264(video_filename, video_info, output_stem, crop, aspect_ratio):
 
 	# This AAC-LC encoder is available in FFmpeg binaries in Ubuntu.
 	#AAC_AUDIO_OPTS="-strict experimental -c:a aac -ar 48000".split()
-	#AAC_CODEC_ATTRIBUTE="mp4a.40.2"
+	AAC_AUDIO_OPTS="-c:a aac -ar 48000".split()
+	AAC_CODEC_ATTRIBUTE="mp4a.40.2"
 
 	# To use this AAC-HE encoder (AAC-HE works better at low bitrates),
 	# you have to build FFmpeg from source.
-	AAC_AUDIO_OPTS="-c:a libfdk_aac -profile:a aac_he -ar 48000".split()
-	AAC_CODEC_ATTRIBUTE="mp4a.40.5"
+	#AAC_AUDIO_OPTS="-c:a libfdk_aac -profile:a aac_he -ar 48000".split()
+	#AAC_CODEC_ATTRIBUTE="mp4a.40.5"
 
 	if not os.path.isdir(output_stem):
 		os.mkdir(output_stem)
@@ -191,6 +195,7 @@ def render_h264(video_filename, video_info, output_stem, crop, aspect_ratio):
 	hls_output_filenames = []
 	for width, height, crf, audio_bitrate, downloadable in resolutions:
 
+		# Skip resolutions which are larger than the source material
 		if height > crop[1]:
 			continue
 
@@ -206,7 +211,7 @@ def render_h264(video_filename, video_info, output_stem, crop, aspect_ratio):
 		argv.extend(H264_VIDEO_OPTS)
 		argv.extend(("-crf", str(crf)))
 		argv.append("-an")
-		argv.extend("-f mp4".split())
+		argv.extend("-f mp4 -y".split())
 		argv.append(test_filename)
 		run(argv)
 
@@ -238,7 +243,7 @@ def render_h264(video_filename, video_info, output_stem, crop, aspect_ratio):
 		argv.extend(AAC_AUDIO_OPTS)
 		argv.extend(("-b:a", "%dk" % (audio_bitrate / 1000)))
 		argv.extend("-pass 2".split())
-		argv.extend("-f mp4".split())
+		argv.extend("-f mp4 -y".split())
 		argv.append(mp4_output_filename)
 		run(argv)
 
@@ -250,7 +255,7 @@ def render_h264(video_filename, video_info, output_stem, crop, aspect_ratio):
 		argv.extend(("-i", mp4_output_filename))
 		argv.extend("-c:v copy -c:a copy".split())
 		argv.extend("-movflags +faststart".split())
-		argv.extend("-hls_time {HLS_SEGMENT_SIZE} -hls_list_size 0 -hls_flags single_file -f hls".format(HLS_SEGMENT_SIZE=HLS_SEGMENT_SIZE).split())
+		argv.extend("-hls_time {HLS_SEGMENT_SIZE} -hls_list_size 0 -hls_flags single_file -f hls -y".format(HLS_SEGMENT_SIZE=HLS_SEGMENT_SIZE).split())
 		argv.append(hls_output_filename)
 		run(argv)
 		hls_output_filenames.append((width, height, (video_bitrate + audio_bitrate), hls_output_filename))
@@ -300,6 +305,12 @@ def render_vp9(video_filename, video_info, output_stem, crop, aspect_ratio):
 			(1440,1080, 34, 128000, True),		# Cropped Full HD
 			)
 
+	# Options used on all passes
+	# According to <http://wiki.webmproject.org/ffmpeg/vp9-encoding-guide>
+	# "Multi-threaded encoding may be used if -threads > 1 and -tile-columns > 0."
+	# According to <https://trac.ffmpeg.org/wiki/Encode/VP9>
+	# Starting with libvpx 1.7.0 using "-row-mt 1" will "greatly enhance the
+	# number of threads the encoder can utilize".
 	WEBM_VIDEO_OPTS1="""
 		-c:v libvpx-vp9
 		-pix_fmt yuv420p 
@@ -307,12 +318,16 @@ def render_vp9(video_filename, video_info, output_stem, crop, aspect_ratio):
 		-aspect {ASPECT}
 		-keyint_min 150 -g 150
 		-tile-columns 6 -frame-parallel 1
+		-threads 4 -row-mt 1
 		""".format(
 			FRAME_RATE=frame_rate,
 			ASPECT=aspect_ratio
 			).split()
 
 	# Extra options for final pass
+	# According to <http://wiki.webmproject.org/ffmpeg/vp9-encoding-guide>
+	# -auto-alt-ref and -lag-in-frames "turn on VP9's alt-ref frames, a VP9
+	# feature that enhances quality".
 	# For explanation of "-anrn-maxframes -1" see https://htrd.su/wiki/zhurnal/2015/11/06/ffmpeg_i_vp9_libvpx
 	WEBM_VIDEO_OPTS2="""
 		-auto-alt-ref 1 -lag-in-frames 25
@@ -332,6 +347,7 @@ def render_vp9(video_filename, video_info, output_stem, crop, aspect_ratio):
 	dash_output_filenames = []
 	for width, height, crf, audio_bitrate, downloadable in resolutions:
 
+		# Skip resolutions which are larger than the source material
 		if height > crop[1]:
 			continue
 
@@ -348,7 +364,7 @@ def render_vp9(video_filename, video_info, output_stem, crop, aspect_ratio):
 		argv.extend("-speed 4".split())
 		argv.extend(("-crf", str(crf), "-b:v", "0"))
 		argv.append("-an")
-		argv.extend("-f webm".split())
+		argv.extend("-f webm -y".split())
 		argv.append(test_filename)
 		run(argv)
 
@@ -381,7 +397,7 @@ def render_vp9(video_filename, video_info, output_stem, crop, aspect_ratio):
 		argv.extend(WEBM_AUDIO_OPTS)
 		argv.extend(("-b:a", "%dk" % (audio_bitrate / 1000)))
 		argv.extend(("-reserve_index_space", str(reserve_index_space)))
-		argv.extend("-f webm".split())
+		argv.extend("-f webm -y".split())
 		argv.append(output_filename)
 		run(argv)
 
@@ -390,7 +406,7 @@ def render_vp9(video_filename, video_info, output_stem, crop, aspect_ratio):
 		argv.extend(("-i", output_filename))
 		argv.extend("-c:v copy".split())
 		argv.append("-an")
-		argv.extend("-dash 1 -f webm".split())
+		argv.extend("-dash 1 -f webm -y".split())
 		argv.append(dash_output_filename)
 		run(argv)
 		dash_output_filenames.append(dash_output_filename)
@@ -408,7 +424,7 @@ def render_vp9(video_filename, video_info, output_stem, crop, aspect_ratio):
 		argv.append("-vn")
 		argv.extend(("-c:a", "libopus"))
 		argv.extend(("-b:a", "%dk" % (audio_bitrate / 1000)))
-		argv.extend("-f webm -dash 1".split())
+		argv.extend("-f webm -y -dash 1".split())
 		argv.append(output_filename)
 		run(argv)
 		dash_output_filenames.append(output_filename)
@@ -453,6 +469,10 @@ parser.add_option("--vp9", action="store_true", dest="vp9")
 parser.add_option("--crop-to-4x3", action="store_true", dest="crop_to_4x3")
 (options, args) = parser.parse_args()
 
+# Fail early if these programs are not available
+run(["MP4Box", "-version"])
+run(["ffmpeg", "-version"])
+
 for video_filename in args:
 	if not os.path.isfile(video_filename):
 		sys.stderr.write("No such file: %s\n" % video_filename)
@@ -468,6 +488,8 @@ for video_filename in args:
 		sys.stderr.write("Invalid or unacceptable aspect ratio: %s\n" % aspect_ratio)
 		sys.exit(10)
 
+	# Determine the part of the frame which we should encode
+	# (width, height, x offset, y offset)
 	if aspect_ratio == "16:9" and options.crop_to_4x3:
 		if (width, height) == (1920, 1080):		# Full HD
 			crop = (1440, height, 240,0)		

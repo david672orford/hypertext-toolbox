@@ -1,7 +1,7 @@
 #! /usr/bin/python3
 # html-style-checker
-# Copyright 2016--2019, Trinity College Computing Center
-# Last modified: 11 October 2019
+# Copyright 2016--2021, Trinity College Computing Center
+# Last modified: 7 August 2021
 #
 # This script checks HTML files for conformance to style. In particular:
 # * That the charset is defined as utf-8 at the top of the <head>
@@ -353,7 +353,7 @@ def check_hyperlink(base, el):
 		if link_text.startswith("<\xa0") or link_text.startswith("< "):
 			if parsed_url.fragment == "":
 				if len(probable_fragments) > 0:
-					warning("a: no fragment in back href: %s" % href)
+					warning("a: back link href has no fragment: %s" % href)
 			else:
 				if not parsed_url.fragment in probable_fragments:
 					warning("a: fragment not found: %s" % href)
@@ -392,7 +392,7 @@ def check_script(el, base, counter):
 			counter['analytics'] += 1
 			if not ".min." in src:
 				warning("script: analytics not minimized")
-			if not "-v3." in src:
+			if not "-v4." in src:
 				warning("obsolete analytics")
 			if not "async" in el.attrib:
 				warning("analytics not async")
